@@ -1,0 +1,189 @@
+@startuml 在线考试系统架构图
+' ============================================================
+' 在线考试系统 系统架构图
+' 层次: 客户端 → API网关 → 业务服务 → 数据访问 → 存储
+' 编写: 系统架构师  日期: 2026-09-30
+' ============================================================
+
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ArrowColor #444444
+skinparam ArrowFontSize 11
+
+skinparam rectangle {
+  BorderColor #2E86C1
+  BackgroundColor #F4F9FC
+  FontColor #1A5276
+}
+skinparam database {
+  BorderColor #1A5276
+  BackgroundColor #D6EAF8
+  FontColor #1A5276
+}
+skinparam node {
+  BorderColor #5DADE2
+  BackgroundColor #EBF5FB
+  FontColor #1A5276
+}
+skinparam package {
+  BorderColor #2E86C1
+  BackgroundColor #FEFEFE
+  FontColor #1A5276
+}
+
+title 在线考试系统 - 系统架构图
+
+' ============ 客户端层 ============
+node "客户端层 (浏览器)" as Client {
+  rectangle "React 18 SPA" as SPA {
+    rectangle "页面组件" as Pages {
+      rectangle "登录页" as P_Login
+      rectangle "用户管理页" as P_User
+      rectangle "题库管理页" as P_Question
+      rectangle "试卷管理页" as P_Paper
+      rectangle "考试管理页" as P_Exam
+      rectangle "在线答题页" as P_Answer
+      rectangle "阅卷页" as P_Grade
+      rectangle "成绩统计页" as P_Score
+    }
+    rectangle "React Router 6\n(路由 / 懒加载)" as Router
+    rectangle "Zustand\n(全局状态)" as Store
+    rectangle "Axios\n(HTTP + JWT拦截)" as HttpClient
+    rectangle "Ant Design 5\n(UI组件库)" as UI
+  }
+}
+
+' ============ API 网关层 ============
+rectangle "API 网关层 (Express 中间件链)" as Gateway {
+  rectangle "CORS 中间件" as MW_CORS
+  rectangle "日志中间件\n(winston)" as MW_Log
+  rectangle "认证中间件\n(JWT 解析校验)" as MW_Auth
+  rectangle "权限中间件\n(RBAC 角色校验)" as MW_RBAC
+  rectangle "参数校验中间件\n(express-validator)" as MW_Validate
+  rectangle "错误处理中间件\n(统一响应)" as MW_Error
+}
+
+' ============ 业务服务层 ============
+rectangle "业务服务层 (Controllers + Services)" as Business {
+  package "用户管理模块" as M_User {
+    rectangle "AuthController" as C_Auth
+    rectangle "UserController" as C_User
+    rectangle "ClassController" as C_Class
+  }
+  package "题库管理模块" as M_Question {
+    rectangle "QuestionController" as C_Question
+  }
+  package "试卷管理模块" as M_Paper {
+    rectangle "PaperController" as C_Paper
+  }
+  package "考试管理模块" as M_Exam {
+    rectangle "ExamController" as C_Exam
+  }
+  package "在线答题模块" as M_Answer {
+    rectangle "AnswerController" as C_Answer
+  }
+  package "阅卷模块" as M_Grade {
+    rectangle "GradeController" as C_Grade
+  }
+  package "成绩统计模块" as M_Score {
+    rectangle "ScoreController" as C_Score
+  }
+}
+
+' ============ 数据访问层 ============
+rectangle "数据访问层 (Sequelize 6 Models)" as DAL {
+  rectangle "User Model" as Model_User
+  rectangle "Class Model" as Model_Class
+  rectangle "Question Model" as Model_Question
+  rectangle "Paper Model" as Model_Paper
+  rectangle "PaperQuestion Model" as Model_PQ
+  rectangle "Exam Model" as Model_Exam
+  rectangle "ExamClass Model" as Model_EC
+  rectangle "ExamRecord Model" as Model_ER
+  rectangle "Answer Model" as Model_Answer
+  rectangle "GradeTask Model" as Model_GT
+}
+
+' ============ 存储层 ============
+database "MySQL 8.0\n(online_exam)" as DB {
+  rectangle "users" as T_User
+  rectangle "classes" as T_Class
+  rectangle "questions" as T_Question
+  rectangle "papers" as T_Paper
+  rectangle "paper_questions" as T_PQ
+  rectangle "exams" as T_Exam
+  rectangle "exam_classes" as T_EC
+  rectangle "exam_records" as T_ER
+  rectangle "answers" as T_Answer
+  rectangle "grade_tasks" as T_GT
+}
+
+database "Redis (可选)\n会话/计时缓存" as Redis
+database "文件存储\n(上传/导出)" as FileStore
+
+' ============ 数据流向 ============
+' 客户端 → 网关
+HttpClient --> MW_CORS : "HTTPS\n(Authorization: Bearer)"
+
+' 网关内部链
+MW_CORS --> MW_Log
+MW_Log --> MW_Auth
+MW_Auth --> MW_RBAC
+MW_RBAC --> MW_Validate
+MW_Validate --> MW_Error
+
+' 网关 → 业务
+MW_Error --> C_Auth
+MW_Error --> C_User
+MW_Error --> C_Question
+MW_Error --> C_Paper
+MW_Error --> C_Exam
+MW_Error --> C_Answer
+MW_Error --> C_Grade
+MW_Error --> C_Score
+
+' 业务 → 数据访问
+C_Auth --> Model_User
+C_User --> Model_User
+C_Class --> Model_Class
+C_Question --> Model_Question
+C_Paper --> Model_Paper
+C_Paper --> Model_PQ
+C_Exam --> Model_Exam
+C_Exam --> Model_EC
+C_Answer --> Model_ER
+C_Answer --> Model_Answer
+C_Grade --> Model_GT
+C_Grade --> Model_Answer
+C_Score --> Model_ER
+
+' 数据访问 → 存储
+Model_User --> T_User
+Model_Class --> T_Class
+Model_Question --> T_Question
+Model_Paper --> T_Paper
+Model_PQ --> T_PQ
+Model_Exam --> T_Exam
+Model_EC --> T_EC
+Model_ER --> T_ER
+Model_Answer --> T_Answer
+Model_GT --> T_GT
+
+' 业务 → 外部服务
+C_Question ..> FileStore : "Excel 导入/导出"
+C_Score ..> FileStore : "成绩单导出"
+C_Auth ..> Redis : "会话缓存(可选)"
+
+' 页面 → 路由 → 状态
+Pages --> Router
+Pages --> Store
+Pages --> UI
+
+' 图例
+legend right
+  |= 线型 |= 含义 |
+  | <font color="#444444">──</font> | 同步调用 / 数据流 |
+  | <font color="#444444">..</font> | 可选依赖 |
+endlegend
+
+@enduml

@@ -1,0 +1,1922 @@
+openapi: 3.0.3
+info:
+  title: 在线考试系统 API 契约
+  description: |
+    在线考试系统前后端绑定接口契约。
+    统一响应格式：{ code, message, data }
+    认证方式：JWT Bearer Token（除登录/注册外所有接口需认证）
+    角色权限：admin(管理员) / teacher(教师) / student(学生)
+  version: 1.0.0
+  contact:
+    name: 系统架构师
+servers:
+  - url: http://localhost:3000
+    description: 开发环境
+  - url: https://api.exam-system.com
+    description: 生产环境
+tags:
+  - name: 认证
+    description: 登录、注册、个人信息、修改密码
+  - name: 用户管理
+    description: 用户 CRUD（管理员）
+  - name: 班级管理
+    description: 班级 CRUD（管理员）
+  - name: 题库管理
+    description: 题目 CRUD、批量导入导出（教师）
+  - name: 试卷管理
+    description: 试卷 CRUD、组卷、预览（教师）
+  - name: 考试管理
+    description: 考试 CRUD、发布、状态管理（教师）
+  - name: 在线答题
+    description: 进入考试、暂存、交卷（学生）
+  - name: 阅卷
+    description: 自动/手动阅卷、阅卷任务（教师/系统）
+  - name: 成绩统计
+    description: 个人/班级成绩、分布统计、导出
+security:
+  - BearerAuth: []
+paths:
+  /api/auth/login:
+    post:
+      tags: [认证]
+      summary: 用户登录
+      description: 账号密码登录，成功签发 JWT 令牌（有效期 2h）
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  example: admin
+                password:
+                  type: string
+                  example: "123456"
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          token:
+                            type: string
+                          userInfo:
+                            $ref: '#/components/schemas/UserInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: 用户名或密码错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 1001
+                message: 用户名或密码错误
+                data: null
+  /api/auth/register:
+    post:
+      tags: [认证]
+      summary: 用户注册
+      description: 管理员创建用户或开放学生自助注册
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, real_name, role]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                real_name:
+                  type: string
+                role:
+                  type: string
+                  enum: [admin, teacher, student]
+                email:
+                  type: string
+                phone:
+                  type: string
+                class_id:
+                  type: integer
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UserInfo'
+        '409':
+          description: 用户名已存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 1002
+                message: 用户名已存在
+                data: null
+  /api/auth/profile:
+    get:
+      tags: [认证]
+      summary: 获取当前用户信息
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UserInfo'
+    put:
+      tags: [认证]
+      summary: 修改个人信息
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                real_name:
+                  type: string
+                email:
+                  type: string
+                phone:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+  /api/auth/password:
+    put:
+      tags: [认证]
+      summary: 修改密码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_password, new_password]
+              properties:
+                old_password:
+                  type: string
+                new_password:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: 旧密码错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/users:
+    get:
+      tags: [用户管理]
+      summary: 用户列表查询（管理员）
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [admin, teacher, student]
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: class_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PageData'
+    post:
+      tags: [用户管理]
+      summary: 创建用户（管理员）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UserInfo'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [用户管理]
+      summary: 用户详情（管理员）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UserInfo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [用户管理]
+      summary: 修改用户（管理员）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+    delete:
+      tags: [用户管理]
+      summary: 删除用户（管理员）
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/users/{id}/reset-password:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [用户管理]
+      summary: 重置用户密码（管理员）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_password]
+              properties:
+                new_password:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+  /api/classes:
+    get:
+      tags: [班级管理]
+      summary: 班级列表查询（管理员）
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: keyword
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PageData'
+    post:
+      tags: [班级管理]
+      summary: 创建班级（管理员）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassCreate'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ClassInfo'
+  /api/classes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [班级管理]
+      summary: 修改班级（管理员）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassCreate'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+    delete:
+      tags: [班级管理]
+      summary: 删除班级（管理员）
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+  /api/classes/{id}/students:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [班级管理]
+      summary: 查询班级下学生列表
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/UserInfo'
+  /api/questions:
+    get:
+      tags: [题库管理]
+      summary: 题目列表查询（教师）
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [single, multiple, judge, fill, short]
+        - name: difficulty
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+        - name: knowledge_point
+          in: query
+          schema:
+            type: string
+        - name: keyword
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/QuestionInfo'
+                          total:
+                            type: integer
+                          page:
+                            type: integer
+                          pageSize:
+                            type: integer
+    post:
+      tags: [题库管理]
+      summary: 新增题目（教师）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionCreate'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/QuestionInfo'
+  /api/questions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [题库管理]
+      summary: 题目详情（教师）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/QuestionInfo'
+    put:
+      tags: [题库管理]
+      summary: 修改题目（教师）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionCreate'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+    delete:
+      tags: [题库管理]
+      summary: 删除题目（教师）
+      description: 已被试卷引用时禁止删除
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '409':
+          description: 题目已被试卷引用，禁止删除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 2001
+                message: 题目已被试卷引用，禁止删除
+                data: null
+  /api/questions/import:
+    post:
+      tags: [题库管理]
+      summary: 批量导入题目（Excel）（教师）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 导入结果
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          success_count:
+                            type: integer
+                          fail_count:
+                            type: integer
+                          errors:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                row:
+                                  type: integer
+                                message:
+                                  type: string
+  /api/questions/export:
+    get:
+      tags: [题库管理]
+      summary: 批量导出题目（Excel）（教师）
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [single, multiple, judge, fill, short]
+        - name: difficulty
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Excel 文件下载
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+  /api/papers:
+    get:
+      tags: [试卷管理]
+      summary: 试卷列表查询（教师）
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, published]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/PaperInfo'
+                          total:
+                            type: integer
+                          page:
+                            type: integer
+                          pageSize:
+                            type: integer
+    post:
+      tags: [试卷管理]
+      summary: 创建试卷（教师）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaperCreate'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PaperInfo'
+  /api/papers/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [试卷管理]
+      summary: 试卷详情（含题目列表）（教师）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PaperDetail'
+    put:
+      tags: [试卷管理]
+      summary: 修改试卷（教师）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaperCreate'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+    delete:
+      tags: [试卷管理]
+      summary: 删除试卷（教师）
+      description: 已被考试引用时禁止删除
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '409':
+          description: 试卷已被考试引用，禁止删除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 3001
+                message: 试卷已被考试引用，禁止删除
+                data: null
+  /api/papers/{id}/questions:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [试卷管理]
+      summary: 添加题目到试卷（教师）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [questions]
+              properties:
+                questions:
+                  type: array
+                  items:
+                    type: object
+                    required: [question_id, score, sort_order]
+                    properties:
+                      question_id:
+                        type: integer
+                      score:
+                        type: number
+                        format: float
+                      sort_order:
+                        type: integer
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+    delete:
+      tags: [试卷管理]
+      summary: 移除试卷题目（教师）
+      parameters:
+        - name: question_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+  /api/papers/auto-generate:
+    post:
+      tags: [试卷管理]
+      summary: 随机组卷（教师）
+      description: 按题型、知识点、难度、数量自动从题库抽题组卷
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, duration, pass_score, rules]
+              properties:
+                name:
+                  type: string
+                duration:
+                  type: integer
+                pass_score:
+                  type: number
+                is_random_order:
+                  type: boolean
+                rules:
+                  type: array
+                  items:
+                    type: object
+                    required: [type, count, score]
+                    properties:
+                      type:
+                        type: string
+                        enum: [single, multiple, judge, fill, short]
+                      count:
+                        type: integer
+                      score:
+                        type: number
+                      difficulty:
+                        type: integer
+                      knowledge_point:
+                        type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PaperInfo'
+  /api/exams:
+    get:
+      tags: [考试管理]
+      summary: 考试列表查询（教师）
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, published, ongoing, finished]
+        - name: keyword
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/ExamInfo'
+                          total:
+                            type: integer
+                          page:
+                            type: integer
+                          pageSize:
+                            type: integer
+    post:
+      tags: [考试管理]
+      summary: 创建考试（教师）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExamCreate'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ExamInfo'
+  /api/exams/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [考试管理]
+      summary: 考试详情（教师）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ExamDetail'
+    put:
+      tags: [考试管理]
+      summary: 修改考试（教师，开始前可改）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExamCreate'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+    delete:
+      tags: [考试管理]
+      summary: 删除考试（教师，进行中不允许）
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '403':
+          description: 考试进行中，不允许删除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 4003
+                message: 考试进行中，不允许删除
+                data: null
+  /api/exams/{id}/publish:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [考试管理]
+      summary: 发布考试（教师）
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+  /api/exams/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [考试管理]
+      summary: 考试状态管理（教师）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [draft, published, ongoing, finished]
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+  /api/exams/{id}/classes:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [考试管理]
+      summary: 指定参考班级（教师）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [class_ids]
+              properties:
+                class_ids:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+  /api/exams/{id}/students:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [考试管理]
+      summary: 查询考试参考学生列表（教师）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/UserInfo'
+  /api/exams/{id}/start:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [在线答题]
+      summary: 进入考试（学生）
+      description: 校验身份与时间窗口，返回试卷题目，创建/复用考试记录
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          exam_record_id:
+                            type: integer
+                          paper:
+                            $ref: '#/components/schemas/PaperDetail'
+                          remain_seconds:
+                            type: integer
+        '400':
+          description: 考试未在时间窗口内
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 4001
+                message: 考试未在时间窗口内
+                data: null
+  /api/exams/{id}/answers:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [在线答题]
+      summary: 答案暂存（学生）
+      description: 实时/定时暂存单题答案至服务端，支持断网续答
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question_id, student_answer]
+              properties:
+                question_id:
+                  type: integer
+                student_answer:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+  /api/exams/{id}/submit:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [在线答题]
+      summary: 交卷（学生）
+      description: 主动交卷或倒计时自动交卷，触发客观题自动阅卷
+      responses:
+        '200':
+          description: 交卷成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          exam_record_id:
+                            type: integer
+                          objective_score:
+                            type: number
+                          has_subjective:
+                            type: boolean
+        '409':
+          description: 已交卷，不可重复提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 4002
+                message: 已交卷，不可重复提交
+                data: null
+  /api/exams/{id}/record:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [在线答题]
+      summary: 查看答题记录（学生）
+      description: 考试结束后查看本人答题与得分
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ExamRecordDetail'
+  /api/exams/student/list:
+    get:
+      tags: [在线答题]
+      summary: 学生考试列表（学生）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            exam_id:
+                              type: integer
+                            name:
+                              type: string
+                            status:
+                              type: string
+                            start_time:
+                              type: string
+                              format: date-time
+                            end_time:
+                              type: string
+                              format: date-time
+                            record_status:
+                              type: string
+                              enum: [not_started, ongoing, submitted, graded]
+                            total_score:
+                              type: number
+  /api/grade-tasks:
+    get:
+      tags: [阅卷]
+      summary: 阅卷任务列表（教师）
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, ongoing, finished]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/GradeTaskInfo'
+                          total:
+                            type: integer
+                          page:
+                            type: integer
+                          pageSize:
+                            type: integer
+  /api/grade-tasks/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [阅卷]
+      summary: 阅卷任务详情（教师）
+      description: 获取待阅卷的学生答卷列表（主观题）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          task:
+                            $ref: '#/components/schemas/GradeTaskInfo'
+                          records:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                exam_record_id:
+                                  type: integer
+                                student_name:
+                                  type: string
+                                answers:
+                                  type: array
+                                  items:
+                                    $ref: '#/components/schemas/AnswerInfo'
+        '404':
+          description: 阅卷任务不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: 6001
+                message: 阅卷任务不存在
+                data: null
+  /api/grade-tasks/{id}/grade:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [阅卷]
+      summary: 手动评分（教师）
+      description: 对主观题逐题评分并可填写评语
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [exam_record_id, answers]
+              properties:
+                exam_record_id:
+                  type: integer
+                answers:
+                  type: array
+                  items:
+                    type: object
+                    required: [answer_id, score]
+                    properties:
+                      answer_id:
+                        type: integer
+                      score:
+                        type: number
+                      comment:
+                        type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+  /api/exams/{id}/auto-grade:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [阅卷]
+      summary: 触发客观题自动阅卷（教师/系统）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          graded_count:
+                            type: integer
+  /api/exams/{id}/grade-progress:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [阅卷]
+      summary: 阅卷进度查看（教师）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          total_count:
+                            type: integer
+                          graded_count:
+                            type: integer
+                          progress:
+                            type: number
+  /api/scores/personal:
+    get:
+      tags: [成绩统计]
+      summary: 个人成绩查询（学生）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            exam_id:
+                              type: integer
+                            exam_name:
+                              type: string
+                            total_score:
+                              type: number
+                            pass_score:
+                              type: number
+                            is_pass:
+                              type: boolean
+                            submit_time:
+                              type: string
+                              format: date-time
+  /api/scores/class/{classId}:
+    parameters:
+      - name: classId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags: [成绩统计]
+      summary: 班级成绩查看（教师）
+      parameters:
+        - name: exam_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            student_id:
+                              type: integer
+                            student_name:
+                              type: string
+                            username:
+                              type: string
+                            total_score:
+                              type: number
+                            is_pass:
+                              type: boolean
+                            submit_time:
+                              type: string
+                              format: date-time
+  /api/scores/statistics:
+    get:
+      tags: [成绩统计]
+      summary: 成绩分布统计与分析指标（教师）
+      parameters:
+        - name: exam_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          max_score:
+                            type: number
+                          min_score:
+                            type: number
+                          avg_score:
+                            type: number
+                          pass_rate:
+                            type: number
+                          std_deviation:
+                            type: number
+                          distribution:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                range:
+                                  type: string
+                                  example: "60-69"
+                                count:
+                                  type: integer
+  /api/scores/export:
+    get:
+      tags: [成绩统计]
+      summary: 成绩单导出（Excel）（教师）
+      parameters:
+        - name: exam_id
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: class_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Excel 文件下载
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+  /api/scores/wrong-questions:
+    get:
+      tags: [成绩统计]
+      summary: 错题统计（学生）
+      parameters:
+        - name: exam_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            exam_id:
+                              type: integer
+                            exam_name:
+                              type: string
+                            question_id:
+                              type: integer
+                            content:
+                              type: string
+                            student_answer:
+                              type: string
+                            correct_answer:
+                              type: string
+                            analysis:
+                              type: string
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Bearer Token 认证
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: 页码（从1开始）
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      description: 每页条数
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+    Id:
+      name: id
+      in: path
+      required: true
+      description: 资源ID
+      schema:
+        type: integer
+  responses:
+    Success:
+      description: 操作成功
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BaseResponse'
+          example:
+            code: 200
+            message: 操作成功
+            data: null
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: 400
+            message: 请求参数错误
+            data: null
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: 404
+            message: 资源不存在
+            data: null
+    Conflict:
+      description: 资源冲突
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    BaseResponse:
+      type: object
+      description: 统一响应格式
+      properties:
+        code:
+          type: integer
+          example: 200
+        message:
+          type: string
+          example: 操作成功
+        data:
+          description: 业务数据
+    ErrorResponse:
+      type: object
+      description: 错误响应
+      properties:
+        code:
+          type: integer
+          example: 400
+        message:
+          type: string
+          example: 请求参数错误
+        data:
+          nullable: true
+          example: null
+    PageData:
+      type: object
+      description: 分页数据
+      properties:
+        list:
+          type: array
+          items:
+            type: object
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    UserInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        real_name:
+          type: string
+        role:
+          type: string
+          enum: [admin, teacher, student]
+        email:
+          type: string
+        phone:
+          type: string
+        class_id:
+          type: integer
+          nullable: true
+        class_name:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, disabled]
+        created_at:
+          type: string
+          format: date-time
+    UserCreate:
+      type: object
+      required: [username, password, real_name, role]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        real_name:
+          type: string
+        role:
+          type: string
+          enum: [admin, teacher, student]
+        email:
+          type: string
+        phone:
+          type: string
+        class_id:
+          type: integer
+        status:
+          type: string
+          enum: [active, disabled]
+          default: active
+    UserUpdate:
+      type: object
+      properties:
+        real_name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        class_id:
+          type: integer
+        status:
+          type: string
+          enum: [active, disabled]
+    ClassInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        grade:
+          type: string
+        department:
+          type: string
+        student_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+    ClassCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        grade:
+          type: string
+        department:
+          type: string
+    QuestionInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [single, multiple, judge, fill, short]
+        content:
+          type: string
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              text:
+                type: string
+        answer:
+          type: string
+        analysis:
+          type: string
+        difficulty:
+          type: integer
+          minimum: 1
+          maximum: 5
+        knowledge_point:
+          type: string
+        score:
+          type: number
+        creator_id:
+          type: integer
+        creator_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    QuestionCreate:
+      type: object
+      required: [type, content, answer, difficulty, score]
+      properties:
+        type:
+          type: string
+          enum: [single, multiple, judge, fill, short]
+        content:
+          type: string
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              text:
+                type: string
+        answer:
+          type: string
+        analysis:
+          type: string
+        difficulty:
+          type: integer
+          minimum: 1
+          maximum: 5
+        knowledge_point:
+          type: string
+        score:
+          type: number
+    PaperInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        total_score:
+          type: number
+        duration:
+          type: integer
+        pass_score:
+          type: number
+        is_random_order:
+          type: boolean
+        creator_id:
+          type: integer
+        creator_name:
+          type: string
+        status:
+          type: string
+          enum: [draft, published]
+        question_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+    PaperCreate:
+      type: object
+      required: [name, total_score, duration, pass_score]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        total_score:
+          type: number
+        duration:
+          type: integer
+        pass_score:
+          type: number
+        is_random_order:
+          type: boolean
+          default: false
+        status:
+          type: string
+          enum: [draft, published]
+          default: draft
+    PaperDetail:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/PaperInfo'
+        - type: object
+          properties:
+            questions:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  question_id:
+                    type: integer
+                  type:
+                    type: string
+                  content:
+                    type: string
+                  options:
+                    type: array
+                    items:
+                      type: object
+                  score:
+                    type: number
+                  sort_order:
+                    type: integer
+    ExamInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+        paper_id:
+          type: integer
+        paper_name:
+          type: string
+        name:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [draft, published, ongoing, finished]
+        creator_id:
+          type: integer
+        creator_name:
+          type: string
+        class_count:
+          type: integer
+        student_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+    ExamCreate:
+      type: object
+      required: [paper_id, name, start_time, end_time]
+      properties:
+        paper_id:
+          type: integer
+        name:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        class_ids:
+          type: array
+          items:
+            type: integer
+        status:
+          type: string
+          enum: [draft, published, ongoing, finished]
+          default: draft
+    ExamDetail:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/ExamInfo'
+        - type: object
+          properties:
+            classes:
+              type: array
+              items:
+                $ref: '#/components/schemas/ClassInfo'
+            paper:
+              $ref: '#/components/schemas/PaperDetail'
+    ExamRecordDetail:
+      type: object
+      properties:
+        exam_record_id:
+          type: integer
+        exam_name:
+          type: string
+        status:
+          type: string
+          enum: [not_started, ongoing, submitted, graded]
+        total_score:
+          type: number
+        start_time:
+          type: string
+          format: date-time
+        submit_time:
+          type: string
+          format: date-time
+          nullable: true
+        answers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnswerInfo'
+    AnswerInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+        question_id:
+          type: integer
+        question_content:
+          type: string
+        question_type:
+          type: string
+        student_answer:
+          type: string
+        correct_answer:
+          type: string
+        score:
+          type: number
+          nullable: true
+        full_score:
+          type: number
+        is_correct:
+          type: boolean
+          nullable: true
+        analysis:
+          type: string
+        comment:
+          type: string
+    GradeTaskInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+        exam_id:
+          type: integer
+        exam_name:
+          type: string
+        teacher_id:
+          type: integer
+        teacher_name:
+          type: string
+        status:
+          type: string
+          enum: [pending, ongoing, finished]
+        total_count:
+          type: integer
+        graded_count:
+          type: integer
+        progress:
+          type: number
+        created_at:
+          type: string
+          format: date-time

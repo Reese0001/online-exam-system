@@ -1,0 +1,38 @@
+{
+  "name": "online-exam-backend",
+  "version": "1.0.0",
+  "description": "在线考试系统后端 API（Node.js + Express + Sequelize + MySQL）",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "test": "jest --coverage --detectOpenHandles",
+    "test:unit": "jest tests/unit --coverage --detectOpenHandles",
+    "test:integration": "jest tests/integration --coverage --detectOpenHandles",
+    "init-db": "node src/scripts/init-db.js"
+  },
+  "keywords": ["exam", "online-exam", "express", "sequelize", "mysql"],
+  "author": "后端开发者(张伟)",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.6.0",
+    "sequelize": "^6.32.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "jest": "^29.6.0",
+    "nodemon": "^3.0.1",
+    "supertest": "^6.3.3",
+    "sequelize": "^6.32.1",
+    "sqlite3": "^5.1.6"
+  }
+}

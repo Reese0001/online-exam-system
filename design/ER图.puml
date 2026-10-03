@@ -1,0 +1,206 @@
+@startuml 在线考试系统ER图
+' ============================================================
+' 在线考试系统 ER 图 (实体关系图)
+' 覆盖 10 个核心实体及其关系
+' 编写: 系统架构师  日期: 2026-09-30
+' ============================================================
+
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam linetype ortho
+
+skinparam entity {
+  BackgroundColor #F4F9FC
+  BorderColor #2E86C1
+  FontColor #1A5276
+}
+skinparam arrow {
+  Color #444444
+}
+
+title 在线考试系统 - ER图 (实体关系图)
+
+' ============ 实体定义 ============
+
+entity "users\n(用户表)" as users {
+  * id : BIGINT <<PK>>
+  --
+  * username : VARCHAR(50) <<UNIQUE>>
+  * password_hash : VARCHAR(100)
+  * real_name : VARCHAR(50)
+  * role : ENUM(admin,teacher,student)
+  email : VARCHAR(100)
+  phone : VARCHAR(20)
+  class_id : BIGINT <<FK>>
+  * status : ENUM(active,disabled)
+  created_at : DATETIME
+  updated_at : DATETIME
+}
+
+entity "classes\n(班级表)" as classes {
+  * id : BIGINT <<PK>>
+  --
+  * name : VARCHAR(100) <<UNIQUE>>
+  grade : VARCHAR(20)
+  department : VARCHAR(100)
+  created_at : DATETIME
+}
+
+entity "questions\n(题目表)" as questions {
+  * id : BIGINT <<PK>>
+  --
+  * type : ENUM(single,multiple,judge,fill,short)
+  * content : TEXT
+  options : JSON
+  * answer : TEXT
+  analysis : TEXT
+  * difficulty : TINYINT(1-5)
+  knowledge_point : VARCHAR(100)
+  * score : DECIMAL(5,1)
+  creator_id : BIGINT <<FK>>
+  created_at : DATETIME
+  updated_at : DATETIME
+  deleted_at : DATETIME
+}
+
+entity "papers\n(试卷表)" as papers {
+  * id : BIGINT <<PK>>
+  --
+  * name : VARCHAR(200)
+  description : TEXT
+  * total_score : DECIMAL(6,1)
+  * duration : INT(分钟)
+  * pass_score : DECIMAL(6,1)
+  * is_random_order : BOOLEAN
+  creator_id : BIGINT <<FK>>
+  * status : ENUM(draft,published)
+  created_at : DATETIME
+  updated_at : DATETIME
+  deleted_at : DATETIME
+}
+
+entity "paper_questions\n(试卷题目关联表)" as paper_questions {
+  * id : BIGINT <<PK>>
+  --
+  * paper_id : BIGINT <<FK>>
+  * question_id : BIGINT <<FK>>
+  * score : DECIMAL(5,1)
+  * sort_order : INT
+}
+
+entity "exams\n(考试表)" as exams {
+  * id : BIGINT <<PK>>
+  --
+  * paper_id : BIGINT <<FK>>
+  * name : VARCHAR(200)
+  * start_time : DATETIME
+  * end_time : DATETIME
+  * status : ENUM(draft,published,ongoing,finished)
+  creator_id : BIGINT <<FK>>
+  created_at : DATETIME
+  updated_at : DATETIME
+  deleted_at : DATETIME
+}
+
+entity "exam_classes\n(考试班级关联表)" as exam_classes {
+  * id : BIGINT <<PK>>
+  --
+  * exam_id : BIGINT <<FK>>
+  * class_id : BIGINT <<FK>>
+}
+
+entity "exam_records\n(考试记录表)" as exam_records {
+  * id : BIGINT <<PK>>
+  --
+  * exam_id : BIGINT <<FK>>
+  * student_id : BIGINT <<FK>>
+  * start_time : DATETIME
+  submit_time : DATETIME
+  * status : ENUM(not_started,ongoing,submitted,graded)
+  total_score : DECIMAL(6,1)
+  created_at : DATETIME
+  updated_at : DATETIME
+}
+
+entity "answers\n(答题记录表)" as answers {
+  * id : BIGINT <<PK>>
+  --
+  * exam_record_id : BIGINT <<FK>>
+  * question_id : BIGINT <<FK>>
+  student_answer : TEXT
+  score : DECIMAL(5,1)
+  is_correct : BOOLEAN
+  graded_by : BIGINT
+  graded_at : DATETIME
+  created_at : DATETIME
+}
+
+entity "grade_tasks\n(阅卷任务表)" as grade_tasks {
+  * id : BIGINT <<PK>>
+  --
+  * exam_id : BIGINT <<FK>>
+  * teacher_id : BIGINT <<FK>>
+  * status : ENUM(pending,ongoing,finished)
+  * total_count : INT
+  * graded_count : INT
+  created_at : DATETIME
+}
+
+' ============ 关系定义 ============
+
+' 班级 1 - N 用户 (一个班级多名学生)
+classes ||--o{ users : "class_id"
+
+' 用户(教师) 1 - N 题目 (教师创建多道题目)
+users ||--o{ questions : "creator_id"
+
+' 用户(教师) 1 - N 试卷 (教师创建多份试卷)
+users ||--o{ papers : "creator_id"
+
+' 试卷 1 - N 试卷题目关联
+papers ||--o{ paper_questions : "paper_id"
+
+' 题目 1 - N 试卷题目关联
+questions ||--o{ paper_questions : "question_id"
+
+' 用户(教师) 1 - N 考试 (教师创建多场考试)
+users ||--o{ exams : "creator_id"
+
+' 试卷 1 - N 考试 (一份试卷多场考试)
+papers ||--o{ exams : "paper_id"
+
+' 考试 1 - N 考试班级关联
+exams ||--o{ exam_classes : "exam_id"
+
+' 班级 1 - N 考试班级关联
+classes ||--o{ exam_classes : "class_id"
+
+' 考试 1 - N 考试记录 (一场考试多名学生答卷)
+exams ||--o{ exam_records : "exam_id"
+
+' 用户(学生) 1 - N 考试记录 (学生多条考试记录)
+users ||--o{ exam_records : "student_id"
+
+' 考试记录 1 - N 答题记录 (一份答卷多题作答)
+exam_records ||--o{ answers : "exam_record_id"
+
+' 题目 1 - N 答题记录 (一道题目多次作答)
+questions ||--o{ answers : "question_id"
+
+' 考试 1 - N 阅卷任务 (一场考试多个阅卷任务)
+exams ||--o{ grade_tasks : "exam_id"
+
+' 用户(教师) 1 - N 阅卷任务 (教师多个阅卷任务)
+users ||--o{ grade_tasks : "teacher_id"
+
+' ============ 图例 ============
+legend right
+  |= 符号 |= 含义 |
+  | * | 主键 / 非空字段 |
+  | <<PK>> | 主键 |
+  | <<FK>> | 外键 |
+  | <<UNIQUE>> | 唯一约束 |
+  | ||--o{ | 一对多 |
+endlegend
+
+@enduml
